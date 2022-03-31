@@ -158,7 +158,6 @@ class Restaurant(models.Model):
 	name = models.CharField(null=False, max_length=100)
 	address = models.CharField(max_length=200)
 	details = models.CharField(max_length=600)
-	owner = 'sahi'
 	manager = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
 	created_at = models.DateTimeField(auto_now_add=True)
 	opened_on = models.DateField(null=False)
@@ -194,6 +193,7 @@ class Menu(models.Model):
 	title = models.CharField(null=False, max_length=100)
 	details = models.CharField(max_length=600)
 	created_at = models.DateTimeField(auto_now_add=True)
+	branch = model.OneToOneField(Branch, on_delete=models.DO_NOTHING)
 
 	class Meta:
 		ordering = ('title',)
