@@ -158,8 +158,13 @@ class Restaurant(models.Model):
 	name = models.CharField(null=False, max_length=100)
 	address = models.CharField(max_length=200)
 	details = models.CharField(max_length=600)
+<<<<<<< HEAD
 	owner = models.ForeignKey(Owner, null=True, on_delete=models.CASCADE)
 	manager = models.ForeignKey(Manager, null=True, on_delete=models.CASCADE)
+=======
+	owner = 'sahi'
+	manager = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 	created_at = models.DateTimeField(auto_now_add=True)
 	opened_on = models.DateField(null=False)
 
@@ -189,11 +194,19 @@ class Branch(models.Model):
 
 
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 class Menu(models.Model):
 	title = models.CharField(null=False, max_length=100)
 	details = models.CharField(max_length=600)
 	created_at = models.DateTimeField(auto_now_add=True)
+<<<<<<< HEAD
 	branch = models.ForeignKey(Branch, related_name='menus', on_delete=models.CASCADE)
+=======
+
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 	class Meta:
 		ordering = ('title',)
 
@@ -240,7 +253,10 @@ class DrinkSelection(models.Model):
 	name = models.CharField(null=False, max_length=100)
 	details = models.CharField(max_length=600)
 	created_at = models.DateTimeField(auto_now_add=True)
+<<<<<<< HEAD
 	branch = models.OneToOneField(Branch, null=True, on_delete=models.DO_NOTHING)
+=======
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 
 	class Meta:
 		ordering = ('name',)
@@ -301,7 +317,11 @@ class Meal(models.Model):
 
 class Order(models.Model):
 	created_by = models.OneToOneField(user_model, null=True, blank=True, on_delete=models.CASCADE)
+<<<<<<< HEAD
 	meals = models.ManyToManyField(Meal,
+=======
+	meal = models.ManyToManyField(Meal,
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 		related_name='orders')
 	NEW = 0
 	RECIEVED = 1

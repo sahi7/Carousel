@@ -5,7 +5,11 @@ from rest_framework import generics
 from rest_framework.generics import CreateAPIView
 from rest_framework.reverse import reverse
 from rest_framework.response import Response
+<<<<<<< HEAD
 from rest_framework.permissions import IsAuthenticated, AllowAny
+=======
+from rest_framework.permissions import IsAuthenticated
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 from .models import Restaurant, Branch, MenuItem, MenuSelection, Menu, DrinkSelection, Drink, MealItem, Meal
 from .models import Order, Payment, Notification, User, Customer
 
@@ -52,11 +56,14 @@ class RestaurantList(generics.ListCreateAPIView):
 	serializer_class = serializers.RestaurantSerializer
 	name = 'restaurant-list'
 
+<<<<<<< HEAD
 	def post(self, request, *args, **kwargs):
 		#Getting current user(owner) from request.data
 		request.data['owner'] = request.user.name
 		return super(RestaurantList, self).post(request, *args, **kwargs)
 
+=======
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 class RestaurantDetail(generics.RetrieveUpdateDestroyAPIView):
 	queryset = Restaurant.objects.all()
 	serializer_class = serializers.RestaurantSerializer
@@ -64,12 +71,18 @@ class RestaurantDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class BranchList(generics.ListCreateAPIView):
+<<<<<<< HEAD
 	permission_classes = [AllowAny]
+=======
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 	queryset = Branch.objects.all()
 	serializer_class = serializers.BranchSerializer
 	name = 'branch-list'
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 class BranchDetail(generics.RetrieveUpdateDestroyAPIView):
 	queryset = Branch.objects.all()
 	serializer_class = serializers.BranchSerializer
@@ -77,7 +90,10 @@ class BranchDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class MenuList(generics.ListCreateAPIView):
+<<<<<<< HEAD
 	permission_classes = [AllowAny]
+=======
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 	queryset = Menu.objects.all()
 	serializer_class = serializers.MenuSerializer
 	name = 'menu-list'
@@ -89,7 +105,10 @@ class MenuDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class MenuSelectionList(generics.ListCreateAPIView):
+<<<<<<< HEAD
 	permission_classes = [AllowAny]
+=======
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 	queryset = MenuSelection.objects.all()
 	serializer_class = serializers.MenuSelectionSerializer
 	name = 'menu_selection-list'
@@ -173,9 +192,14 @@ class PaymentList(generics.ListCreateAPIView):
 
 
 
+<<<<<<< HEAD
 
 class ApiRoot(generics.GenericAPIView):
 	permission_classes = [AllowAny]
+=======
+"""
+class ApiRoot(generics.GenericAPIView):
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 	name = 'api-root'
 
 	def get(self, request, *args, **kwargs):
@@ -186,13 +210,18 @@ class ApiRoot(generics.GenericAPIView):
 			'Menu Selections': reverse(MenuSelectionList.name, request=request),
 			'Menu Items': reverse(MenuItemList.name, request=request),
 			'Drink Selections': reverse(DrinkSelectionList.name, request=request),
+<<<<<<< HEAD
 			'Drinks': reverse(DrinkList.name, request=request),
+=======
+			'Drink': reverse(DrinkList.name, request=request),
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 			'Meal Items': reverse(MealItemlList.name, request=request),
 			'Meals': reverse(MealList.name, request=request),
 			'Orders': reverse(OrderList.name, request=request),
 			'Payments': reverse(PaymentList.name, request=request),
 			})
 
+<<<<<<< HEAD
 
 """
 class RestaurantBranchView():
@@ -203,4 +232,6 @@ class RestaurantBranchView():
 
 	serializer.save(author=self.request.user, restaurant=restaurant)
 
+=======
+>>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 """
