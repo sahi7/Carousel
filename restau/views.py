@@ -5,7 +5,7 @@ from rest_framework import generics
 from rest_framework.generics import CreateAPIView
 from rest_framework.reverse import reverse
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from .models import Restaurant, Branch, MenuItem, MenuSelection, Menu, DrinkSelection, Drink, MealItem, Meal
 from .models import Order, Payment, Notification, User, Customer
 
@@ -47,10 +47,15 @@ class UserDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class RestaurantList(generics.ListCreateAPIView):
-	#permission_classes = [IsAuthenticated]
+	permission_classes = [IsAuthenticated]
 	queryset = Restaurant.objects.all()
 	serializer_class = serializers.RestaurantSerializer
 	name = 'restaurant-list'
+
+	def post(self, request, *args, **kwargs):
+		#Getting current user(owner) from request.data
+		request.data['owner'] = request.user.name
+		return super(RestaurantList, self).post(request, *args, **kwargs)
 
 class RestaurantDetail(generics.RetrieveUpdateDestroyAPIView):
 	queryset = Restaurant.objects.all()
@@ -59,9 +64,11 @@ class RestaurantDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class BranchList(generics.ListCreateAPIView):
+	permission_classes = [AllowAny]
 	queryset = Branch.objects.all()
 	serializer_class = serializers.BranchSerializer
 	name = 'branch-list'
+
 
 class BranchDetail(generics.RetrieveUpdateDestroyAPIView):
 	queryset = Branch.objects.all()
@@ -70,6 +77,7 @@ class BranchDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class MenuList(generics.ListCreateAPIView):
+	permission_classes = [AllowAny]
 	queryset = Menu.objects.all()
 	serializer_class = serializers.MenuSerializer
 	name = 'menu-list'
@@ -81,6 +89,7 @@ class MenuDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class MenuSelectionList(generics.ListCreateAPIView):
+	permission_classes = [AllowAny]
 	queryset = MenuSelection.objects.all()
 	serializer_class = serializers.MenuSelectionSerializer
 	name = 'menu_selection-list'
@@ -164,8 +173,9 @@ class PaymentList(generics.ListCreateAPIView):
 
 
 
-"""
+
 class ApiRoot(generics.GenericAPIView):
+	permission_classes = [AllowAny]
 	name = 'api-root'
 
 	def get(self, request, *args, **kwargs):
@@ -176,11 +186,21 @@ class ApiRoot(generics.GenericAPIView):
 			'Menu Selections': reverse(MenuSelectionList.name, request=request),
 			'Menu Items': reverse(MenuItemList.name, request=request),
 			'Drink Selections': reverse(DrinkSelectionList.name, request=request),
-			'Drink': reverse(DrinkList.name, request=request),
+			'Drinks': reverse(DrinkList.name, request=request),
 			'Meal Items': reverse(MealItemlList.name, request=request),
 			'Meals': reverse(MealList.name, request=request),
 			'Orders': reverse(OrderList.name, request=request),
 			'Payments': reverse(PaymentList.name, request=request),
 			})
+
+
+"""
+class RestaurantBranchView():
+
+	def perform_create(self, serializer):
+	restaurant_pk = self.kwargs['restaurant_pk']
+	restaurant = get_object_or_404(Restaurant.objects.all(), pk=restaurant_pk)
+
+	serializer.save(author=self.request.user, restaurant=restaurant)
 
 """

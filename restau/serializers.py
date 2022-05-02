@@ -73,36 +73,44 @@ class OwnerRegisterSerializer(DefaultRegisterUserSerializer):
 
 
 class RestaurantSerializer(serializers.HyperlinkedModelSerializer):
-	owner = serializers.ReadOnlyField(source='owner.username')
-	manager = serializers.SlugRelatedField(queryset=User.objects.filter(is_manager=True),
-		slug_field='username')
+	owner = serializers.SlugRelatedField(queryset=Owner.objects.all(),
+		slug_field='name',)
 
 	class Meta:
 		model = Restaurant
-		fields = ('id', 'name', 'address', 'owner', 'manager', 'created_at', 'opened_on')
+		fields = ('url', 'owner', 'id', 'name', 'address', 'created_at', 'opened_on')
 
 
 class BranchSerializer(serializers.HyperlinkedModelSerializer):
-	restaurant = serializers.ReadOnlyField(source='restaurant.name')
 
 	class Meta:
 		model = Branch
 		fields = ('url', 'id', 'name', 'address', 'details', 'restaurant', 'created_at', 'opened_on',)
 
+	def to_representation(self, instance):
+		response = super().to_representation(instance)
+		response['restaurant'] = RestaurantSerializer(instance.restaurant, context={'request': None}).data
+		return response
 
 
 
 class MenuSerializer(serializers.HyperlinkedModelSerializer):
 
+
 	class Meta:
 		model = Menu
-		fields = ('url', 'id', 'title', 'details', 'created_at',)
+		fields = ('url', 'id', 'title', 'details', 'branch', 'created_at',)
+
+	def to_representation(self, instance):
+		response = super().to_representation(instance)
+		response['branch'] = MenuSerializer(instance.branch, context={'request': None}).data
+		return response
  
 
 
 class MenuSelectionSerializer(serializers.HyperlinkedModelSerializer):
 	menu = serializers.SlugRelatedField(queryset=Menu.objects.all(),
-		slug_field='nom',)
+		slug_field='title',)
 
 	class Meta:
 		model = MenuSelection
