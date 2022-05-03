@@ -123,11 +123,7 @@ REST_FRAMEWORK = {
     ),
 
     'DEFAULT_PERMISSION_CLASSES': (
-<<<<<<< HEAD
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
-=======
-        'rest_framework.permissions.AllowAny',
->>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 
     ),
 }

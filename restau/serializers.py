@@ -73,7 +73,6 @@ class OwnerRegisterSerializer(DefaultRegisterUserSerializer):
 
 
 class RestaurantSerializer(serializers.HyperlinkedModelSerializer):
-<<<<<<< HEAD
 	owner = serializers.SlugRelatedField(queryset=Owner.objects.all(),
 		slug_field='name',)
 
@@ -83,37 +82,20 @@ class RestaurantSerializer(serializers.HyperlinkedModelSerializer):
 
 
 class BranchSerializer(serializers.HyperlinkedModelSerializer):
-=======
-	owner = serializers.ReadOnlyField(source='owner.username')
-	manager = serializers.SlugRelatedField(queryset=User.objects.filter(is_manager=True),
-		slug_field='username')
-
-	class Meta:
-		model = Restaurant
-		fields = ('id', 'name', 'address', 'owner', 'manager', 'created_at', 'opened_on')
-
-
-class BranchSerializer(serializers.HyperlinkedModelSerializer):
-	restaurant = serializers.ReadOnlyField(source='restaurant.name')
->>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 
 	class Meta:
 		model = Branch
 		fields = ('url', 'id', 'name', 'address', 'details', 'restaurant', 'created_at', 'opened_on',)
 
-<<<<<<< HEAD
 	def to_representation(self, instance):
 		response = super().to_representation(instance)
 		response['restaurant'] = RestaurantSerializer(instance.restaurant, context={'request': None}).data
 		return response
-=======
->>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 
 
 
 class MenuSerializer(serializers.HyperlinkedModelSerializer):
 
-<<<<<<< HEAD
 
 	class Meta:
 		model = Menu
@@ -123,21 +105,12 @@ class MenuSerializer(serializers.HyperlinkedModelSerializer):
 		response = super().to_representation(instance)
 		response['branch'] = MenuSerializer(instance.branch, context={'request': None}).data
 		return response
-=======
-	class Meta:
-		model = Menu
-		fields = ('url', 'id', 'title', 'details', 'created_at',)
->>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
  
 
 
 class MenuSelectionSerializer(serializers.HyperlinkedModelSerializer):
 	menu = serializers.SlugRelatedField(queryset=Menu.objects.all(),
-<<<<<<< HEAD
 		slug_field='title',)
-=======
-		slug_field='nom',)
->>>>>>> 3a517a2335cc9f2d5939afd22149f4749019f035
 
 	class Meta:
 		model = MenuSelection
