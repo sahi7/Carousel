@@ -96,15 +96,10 @@ class BranchSerializer(serializers.HyperlinkedModelSerializer):
 
 class MenuSerializer(serializers.HyperlinkedModelSerializer):
 
-
 	class Meta:
 		model = Menu
 		fields = ('url', 'id', 'title', 'details', 'branch', 'created_at',)
 
-	def to_representation(self, instance):
-		response = super().to_representation(instance)
-		response['branch'] = MenuSerializer(instance.branch, context={'request': None}).data
-		return response
  
 
 
@@ -122,7 +117,7 @@ class MenuItemSerializer(serializers.HyperlinkedModelSerializer):
 
 	class Meta:
 		model = MenuItem
-		fields = ('url', 'id', 'title', 'price', 'menu_selection',)
+		fields = ('url', 'id', 'title', 'details', 'price', 'menu_selection',)
 
 
 
@@ -131,7 +126,7 @@ class DrinkSelectionSerializer(serializers.HyperlinkedModelSerializer):
 
 	class Meta:
 		model = DrinkSelection
-		fields = ('url', 'name', 'created_at',)
+		fields = ('url', 'name', 'branch', 'created_at',)
 
 
 

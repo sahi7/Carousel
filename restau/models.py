@@ -175,8 +175,7 @@ class Branch(models.Model):
 	name = models.CharField(null=False, max_length=100)
 	address = models.CharField(max_length=200)
 	details = models.CharField(max_length=600)
-	restaurant = models.ForeignKey(Restaurant,
-		related_name='branches',
+	restaurant = models.ForeignKey(Restaurant, related_name='branches',
 		on_delete=models.CASCADE)
 	created_at = models.DateTimeField(auto_now_add=True)
 	opened_on = models.DateField(null=False)
@@ -205,8 +204,7 @@ class Menu(models.Model):
 class MenuSelection(models.Model):
 	title = models.CharField(null=False, max_length=100)
 	details = models.CharField(max_length=600)
-	menu = models.ForeignKey(Menu,
-		related_name='menu_selection',
+	menu = models.ForeignKey(Menu, related_name='menu_selection',
 		on_delete=models.CASCADE)
 	created_at = models.DateTimeField(auto_now_add=True)
 
@@ -240,7 +238,7 @@ class DrinkSelection(models.Model):
 	name = models.CharField(null=False, max_length=100)
 	details = models.CharField(max_length=600)
 	created_at = models.DateTimeField(auto_now_add=True)
-	branch = models.OneToOneField(Branch, null=True, on_delete=models.DO_NOTHING)
+	branch = models.ManyToManyField(Branch, blank=False)
 
 	class Meta:
 		ordering = ('name',)

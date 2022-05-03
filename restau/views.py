@@ -89,37 +89,37 @@ class MenuDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class MenuSelectionList(generics.ListCreateAPIView):
-	permission_classes = [AllowAny]
 	queryset = MenuSelection.objects.all()
 	serializer_class = serializers.MenuSelectionSerializer
-	name = 'menu_selection-list'
+	name = 'menuselection-list'
 
 class MenuSelectionDetail(generics.RetrieveUpdateDestroyAPIView):
 	queryset = MenuSelection.objects.all()
 	serializer_class = serializers.MenuSelectionSerializer
-	name = 'menu_selection-detail'
+	name = 'menuselection-detail'
 
 
 class MenuItemList(generics.ListCreateAPIView):
 	queryset = MenuItem.objects.all()
 	serializer_class = serializers.MenuItemSerializer
-	name = 'menu_item-list'
+	name = 'menuitem-list'
 
 class MenuItemDetail(generics.RetrieveUpdateDestroyAPIView):
 	queryset = MenuItem.objects.all()
 	serializer_class = serializers.MenuItemSerializer
-	name = 'menu_item-detail'
+	name = 'menuitem-detail'
 
 
 class DrinkSelectionList(generics.ListCreateAPIView):
+	permission_classes = [AllowAny]
 	queryset = DrinkSelection.objects.all()
 	serializer_class = serializers.DrinkSelectionSerializer
-	name = 'drink_selection-list'
+	name = 'drinkselection-list'
 
 class DrinkSelectionDetail(generics.RetrieveUpdateDestroyAPIView):
 	queryset = DrinkSelection.objects.all()
 	serializer_class = serializers.DrinkSelectionSerializer
-	name = 'drink_selection-detail'
+	name = 'drinkselection-detail'
 
 
 class DrinkList(generics.ListCreateAPIView):
@@ -136,12 +136,12 @@ class DrinkDetail(generics.RetrieveUpdateDestroyAPIView):
 class MealItemlList(generics.ListCreateAPIView):
 	queryset = MealItem.objects.all()
 	serializer_class = serializers.MealItemSerializer
-	name = 'meal_item-list'
+	name = 'mealitem-list'
 
 class MealItemDetail(generics.RetrieveUpdateDestroyAPIView):
 	queryset = MealItem.objects.all()
 	serializer_class = serializers.MealItemSerializer
-	name = 'meal_item-detail'
+	name = 'mealitem-detail'
 
 
 class MealList(generics.ListCreateAPIView):
