@@ -126,7 +126,7 @@ class DrinkSelectionSerializer(serializers.HyperlinkedModelSerializer):
 
 	class Meta:
 		model = DrinkSelection
-		fields = ('url', 'name', 'branch', 'created_at',)
+		fields = ('url', 'id', 'name', 'branch', 'created_at',)
 
 
 
@@ -134,7 +134,7 @@ class DrinkSerializer(serializers.HyperlinkedModelSerializer):
 
 	class Meta:
 		model = Drink
-		fields = ('url', 'price', 'drink_selection', 'created_at',)
+		fields = ('url', 'id', 'name', 'price', 'drink_selection', 'created_at',)
 
 
 
@@ -142,16 +142,12 @@ class MealItemSerializer(serializers.HyperlinkedModelSerializer):
 
 	class Meta:
 		model = MealItem
-		fields = ('url', 'menu_item', 'quantity',)
+		fields = ('url', 'id', 'menu_item', 'quantity',)
 
 
 
 class MealSerializer(serializers.HyperlinkedModelSerializer):
-	meal_items = serializers.SlugRelatedField(
-        many=True,
-        read_only=True,
-        slug_field='name'
-     )
+
 
 	class Meta:
 		model = Meal
@@ -161,10 +157,12 @@ class MealSerializer(serializers.HyperlinkedModelSerializer):
 
 class OrderSerializer(serializers.HyperlinkedModelSerializer):
 	status = serializers.ChoiceField(choices=Order.ORDER_CHOICES)
+	created_by = serializers.SlugRelatedField(queryset=User.objects.all(),
+		slug_field='name',)
 
 	class Meta:
 		model = Order
-		fields = ('url', 'id', 'created_by', 'meal', 'status')
+		fields = '__all__'
 
 
 

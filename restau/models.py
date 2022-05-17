@@ -238,7 +238,7 @@ class DrinkSelection(models.Model):
 	name = models.CharField(null=False, max_length=100)
 	details = models.CharField(max_length=600)
 	created_at = models.DateTimeField(auto_now_add=True)
-	branch = models.ManyToManyField(Branch, blank=False)
+	branch = models.ManyToManyField(Branch)
 
 	class Meta:
 		ordering = ('name',)
@@ -285,7 +285,7 @@ class Meal(models.Model):
 	name = models.CharField(null=False, max_length=100)
 	details = models.CharField(max_length=600)
 	meal_items = models.ForeignKey(MealItem, null=True, on_delete=models.CASCADE)
-	drinks = models.ManyToManyField(Drink)
+	drinks = models.ManyToManyField(Drink, blank=True)
 	created_at = models.DateTimeField(auto_now_add=True)
 
 	class Meta:
@@ -299,19 +299,20 @@ class Meal(models.Model):
 
 class Order(models.Model):
 	created_by = models.OneToOneField(user_model, null=True, blank=True, on_delete=models.CASCADE)
-	meals = models.ManyToManyField(Meal,
-		related_name='orders')
+	meals = models.ForeignKey(Meal, on_delete=models.CASCADE, null=True)
 	NEW = 0
 	RECIEVED = 1
 	PREPARING = 2
 	COMPLETE = 3
 	CANCELLED = 4
+	TRANSIT = 5
 	ORDER_CHOICES = (
 			(NEW, 'New'),
 			(RECIEVED, 'Recieved'),
 			(PREPARING, 'Preparing'),
 			(COMPLETE, 'Complete'),
 			(CANCELLED, 'Cancelled'),
+			(TRANSIT, 'In Transit'),
 		)
 	table = models.CharField(max_length=10, null=True)
 	status = models.SmallIntegerField(choices=ORDER_CHOICES, default=NEW)
@@ -339,35 +340,35 @@ class Order(models.Model):
 
 
 class Payment(models.Model):
- 	amount= models.DecimalField(max_digits=10, decimal_places=2)
- 	created_at = models.DateTimeField(auto_now_add=True)
- 	UNPAID = 0
- 	COMPLETE = 1
- 	REFUNDED = 2
- 	DECLINED = 3
- 	SETTLING = 4
- 	PAYMENT_CHOICES = (
-			(UNPAID, 'Unpaid'),
-			(COMPLETE, 'Complete'),
-			(REFUNDED, 'Refunded'),
-			(DECLINED, 'Declined'),
-			(SETTLING, 'Settling'),
-		)
+        order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True)
+        amount = models.DecimalField(max_digits=10, decimal_places=2)
+        created_at = models.DateTimeField(auto_now_add=True)
+        UNPAID = 0
+        COMPLETE = 1
+        REFUNDED = 2
+        DECLINED = 3
+        SETTLING = 4
+        PAYMENT_CHOICES = (
+                        (UNPAID, 'Unpaid'),
+                        (COMPLETE, 'Complete'),
+                        (REFUNDED, 'Refunded'),
+                        (DECLINED, 'Declined'),
+                        (SETTLING, 'Settling'),
+                )
 
- 	status = models.SmallIntegerField(choices=PAYMENT_CHOICES, default=UNPAID)
+        status = models.SmallIntegerField(choices=PAYMENT_CHOICES, default=UNPAID)
 
- 	class Meta:
- 		ordering = ('created_at',)
+        class Meta:
+                ordering = ('created_at',)
 
- 	def __str__(self):
- 		return self.status
+        def __str__(self):
+                return self.status
 
 
 
 
 class Notification(models.Model):
-	order = models.ForeignKey(Order,
-		on_delete=models.SET_NULL, null=True)
+	order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True)
 	header = models.CharField(max_length=100)
 	content = models.CharField(max_length=600)
 	email = models.EmailField(max_length=50)

@@ -111,7 +111,6 @@ class MenuItemDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class DrinkSelectionList(generics.ListCreateAPIView):
-	permission_classes = [AllowAny]
 	queryset = DrinkSelection.objects.all()
 	serializer_class = serializers.DrinkSelectionSerializer
 	name = 'drinkselection-list'
@@ -134,9 +133,12 @@ class DrinkDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class MealItemlList(generics.ListCreateAPIView):
+	permission_classes = [AllowAny]
 	queryset = MealItem.objects.all()
 	serializer_class = serializers.MealItemSerializer
 	name = 'mealitem-list'
+
+
 
 class MealItemDetail(generics.RetrieveUpdateDestroyAPIView):
 	queryset = MealItem.objects.all()
@@ -145,6 +147,7 @@ class MealItemDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class MealList(generics.ListCreateAPIView):
+	permission_classes = [AllowAny]
 	queryset = Meal.objects.all()
 	serializer_class = serializers.MealSerializer
 	name = 'meal-list'
@@ -156,9 +159,18 @@ class MealDetail(generics.RetrieveUpdateDestroyAPIView):
 
 
 class OrderList(generics.ListCreateAPIView):
+	permission_classes = [AllowAny]
 	queryset = Order.objects.all()
 	serializer_class = serializers.OrderSerializer
 	name = 'order-list'
+
+
+	def post(self, request, *args, **kwargs):
+		#Getting current user(owner) from request.data
+		request.data['created_by'] = request.user.name
+		return super(OrderList, self).post(request, *args, **kwargs)
+
+		
 
 class OrderDetail(generics.RetrieveUpdateDestroyAPIView):
 	queryset = Order.objects.all()
