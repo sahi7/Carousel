@@ -4,7 +4,6 @@ import (
     "context"
     "encoding/json"
     "fmt"
-    "log"
 
     "github.com/confluentinc/confluent-kafka-go/v2/kafka"
     "carousel/internal/config"
@@ -20,12 +19,13 @@ type Handler struct {
 }
 
 // NewHandler creates a payroll handler
-func NewHandler(cfg config.Config) services.EventHandler {
-    baseDB, err := db.NewPostgres(cfg.PostgresDSN, cfg.RedisAddr)
-    if err != nil {
-        log.Fatalf("Failed to initialize database: %v", err)
-    }
-    dbClient := db.NewPayrollDB(baseDB) // Initialize PayrollDB
+func NewHandler(cfg config.Config, postgres *db.Postgres) services.EventHandler {
+    // baseDB, err := db.NewPostgres(cfg.PostgresDSN, cfg.RedisAddr)
+    // if err != nil {
+    //     log.Fatalf("Failed to initialize database: %v", err)
+    // }
+    // dbClient := db.NewPayrollDB(baseDB) // Initialize PayrollDB
+    dbClient := db.NewPayrollDB(postgres)
     return &Handler{
         config:    cfg,
         db:        dbClient,

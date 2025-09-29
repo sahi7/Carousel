@@ -38,7 +38,7 @@ func (pd *PayrollDB) FetchUsers(ctx context.Context, periodEvent map[string]inte
 	cacheKey := buildCacheKey(periodEvent)
 	// fmt.Printf("periodEvent: %+v\n %s\n", periodEvent, cacheKey)
 	// fmt.Printf("cacheKey: %+v\n", cacheKey)
-	cached, err := pd.p.cache.Get(ctx, cacheKey)
+	cached, err := pd.p.Cache.Get(ctx, cacheKey)
 	if err == nil {
 		var users []models.CustomUser
 		if err := json.Unmarshal([]byte(cached), &users); err == nil {
@@ -82,7 +82,7 @@ func (pd *PayrollDB) FetchUsers(ctx context.Context, periodEvent map[string]inte
 	args = append(args, offset)
 
 	// fmt.Printf("Executing query: %s with args: %+v\n", query, args)
-	rows, err := pd.p.pool.Query(ctx, query, args...)
+	rows, err := pd.p.Pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (pd *PayrollDB) FetchRules(ctx context.Context, periodEvent map[string]inte
 	// Derive missing scope details from branch or restaurant
 	if branchID != nil {
 		var rID, cID int64
-		err := pd.p.pool.QueryRow(ctx, `
+		err := pd.p.Pool.QueryRow(ctx, `
 			SELECT restaurant_id, company_id FROM cre_branch WHERE id = $1
 		`, *branchID).Scan(&rID, &cID)
 		if err == nil {
@@ -158,7 +158,7 @@ func (pd *PayrollDB) FetchRules(ctx context.Context, periodEvent map[string]inte
 		}
 	} else if restaurantID != nil {
 		var cID int64
-		err := pd.p.pool.QueryRow(ctx, `
+		err := pd.p.Pool.QueryRow(ctx, `
 			SELECT company_id FROM cre_restaurant WHERE id = $1
 		`, *restaurantID).Scan(&cID)
 		if err == nil {
@@ -175,7 +175,7 @@ func (pd *PayrollDB) FetchRules(ctx context.Context, periodEvent map[string]inte
 	var branchRules, restaurantRules, companyRules []models.Rule
 
 	if branchID != nil {
-		rows, err := pd.p.pool.Query(ctx, `
+		rows, err := pd.p.Pool.Query(ctx, `
 			SELECT id, name, rule_type, amount, scope, company_id, restaurant_id, branch_id, priority, is_active
 			FROM payroll_rule
 			WHERE is_active = true AND effective_from <= $1 AND branch_id = $2
@@ -191,7 +191,7 @@ func (pd *PayrollDB) FetchRules(ctx context.Context, periodEvent map[string]inte
 	}
 
 	if restaurantID != nil {
-		rows, err := pd.p.pool.Query(ctx, `
+		rows, err := pd.p.Pool.Query(ctx, `
 			SELECT id, name, rule_type, amount, scope, company_id, restaurant_id, branch_id, priority, is_active
 			FROM payroll_rule
 			WHERE is_active = true AND effective_from <= $1 AND restaurant_id = $2
@@ -207,7 +207,7 @@ func (pd *PayrollDB) FetchRules(ctx context.Context, periodEvent map[string]inte
 	}
 
 	if companyID != nil {
-		rows, err := pd.p.pool.Query(ctx, `
+		rows, err := pd.p.Pool.Query(ctx, `
 			SELECT id, name, rule_type, amount, scope, company_id, restaurant_id, branch_id, priority, is_active
 			FROM payroll_rule
 			WHERE is_active = true AND effective_from <= $1 AND company_id = $2
@@ -328,7 +328,7 @@ func (pd *PayrollDB) FetchRuleTargets(ctx context.Context, ruleIDs []int64, user
 		return nil, nil, nil, err
 	}
 
-	rows, err := pd.p.pool.Query(ctx, query, args...)
+	rows, err := pd.p.Pool.Query(ctx, query, args...)
 	if err != nil {
 		fmt.Println("Error fetching rule targets:", err)
 		return nil, nil, nil, err
@@ -453,7 +453,7 @@ func (pd *PayrollDB) FetchOverrides(ctx context.Context, ruleIDs []int64, period
 		return nil, nil, nil, nil, err
 	}
 
-	rows, err := pd.p.pool.Query(ctx, query, args...)
+	rows, err := pd.p.Pool.Query(ctx, query, args...)
 	if err != nil {
 		fmt.Println("Error fetching overrides:", err)
 		return nil, nil, nil, nil, err
@@ -599,7 +599,7 @@ func (pd *PayrollDB) LogActivity(ctx context.Context, activityType string, detai
 		return err
 	}
 
-	_, err = pd.p.pool.Exec(ctx, `
+	_, err = pd.p.Pool.Exec(ctx, `
 		INSERT INTO notifications_branchactivity (activity_type, timestamp, details, branch_id, user_id)
 		VALUES ($1, $2, $3::jsonb, $4, $5)
 	`, activityType, time.Now(), jsonDetails, branchID, userID)
