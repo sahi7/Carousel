@@ -74,7 +74,8 @@ func (sp *SubscriptionProcessor) Start(ctx context.Context) error {
 
 // processMessage processes a single stream message
 func (sp *SubscriptionProcessor) processMessage(ctx context.Context, streamID string, values map[string]interface{}) {
-    var req models.SubscriptionRequest
+	fmt.Printf("streamID-values: ", streamID, values, "\n")
+	var req models.SubscriptionRequest
     data, err := json.Marshal(values)
     if err != nil {
         sp.db.LogError(ctx, uuid.UUID{}, fmt.Sprintf("Invalid JSON: %v", err), streamID)
@@ -112,7 +113,8 @@ func (sp *SubscriptionProcessor) processMessage(ctx context.Context, streamID st
 
 // handleCreate processes subscription creation
 func (sp *SubscriptionProcessor) handleCreate(ctx context.Context, req models.SubscriptionRequest) (bool, error) {
-    subscriptionID, err := uuid.Parse(req.SubscriptionID)
+    fmt.Printf("subscription req: ", req, "\n")
+	subscriptionID, err := uuid.Parse(req.SubscriptionID)
     if err != nil {
         return false, fmt.Errorf("invalid subscription_id: %v", err)
     }

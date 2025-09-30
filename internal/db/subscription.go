@@ -29,7 +29,7 @@ func NewSubscriptionDB(pool *pgxpool.Pool, cache *cache.Redis) *SubscriptionDB {
 func (sdb *SubscriptionDB) CacheAllPlans(ctx context.Context) error {
     rows, err := sdb.Pool.Query(ctx, `
         SELECT plan_id, name, billing_type, monthly_price, included_credits, grace_credits, grace_days, is_active, created_at
-        FROM subscription_plan WHERE is_active = TRUE
+        FROM subscriptions_plan WHERE is_active = TRUE
     `)
     if err != nil {
         return fmt.Errorf("failed to query plans: %v", err)
@@ -76,7 +76,7 @@ func (sdb *SubscriptionDB) GetPlan(ctx context.Context, planID uuid.UUID) (*mode
     var plan models.Plan
     err = sdb.Pool.QueryRow(ctx, `
         SELECT plan_id, name, billing_type, monthly_price, included_credits, grace_credits, grace_days, is_active, created_at
-        FROM subscription_plan WHERE plan_id = $1 AND is_active = TRUE
+        FROM subscriptions_plan WHERE plan_id = $1 AND is_active = TRUE
     `, planID).Scan(
         &plan.PlanID, &plan.Name, &plan.BillingType, &plan.MonthlyPrice, &plan.IncludedCredits,
         &plan.GraceCredits, &plan.GraceDays, &plan.IsActive, &plan.CreatedAt)
@@ -99,7 +99,7 @@ func (sdb *SubscriptionDB) GetPlan(ctx context.Context, planID uuid.UUID) (*mode
 // CheckSubscriptionExists checks if a subscription exists
 func (sdb *SubscriptionDB) CheckSubscriptionExists(ctx context.Context, subscriptionID uuid.UUID) (bool, error) {
     var exists bool
-    err := sdb.Pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM subscription_subscription WHERE subscription_id = $1)", subscriptionID).Scan(&exists)
+    err := sdb.Pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM subscriptions_subscription WHERE subscription_id = $1)", subscriptionID).Scan(&exists)
     if err != nil {
         return false, fmt.Errorf("failed to check subscription existence: %v", err)
     }
@@ -109,7 +109,7 @@ func (sdb *SubscriptionDB) CheckSubscriptionExists(ctx context.Context, subscrip
 // CreateSubscription creates a new subscription
 func (sdb *SubscriptionDB) CreateSubscription(ctx context.Context, tx pgx.Tx, subscription *models.Subscription, featureIDs []uuid.UUID) error {
     _, err := tx.Exec(ctx, `
-        INSERT INTO subscription_subscription (subscription_id, entity_type, entity_id, plan_id, status, start_date, current_period_start, plan_name, created_at, updated_at)
+        INSERT INTO subscriptions_subscription (subscription_id, entity_type, entity_id, plan_id, status, start_date, current_period_start, plan_name, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     `, subscription.SubscriptionID, subscription.EntityType, subscription.EntityID, subscription.PlanID,
         subscription.Status, subscription.StartDate, subscription.CurrentPeriodStart,
@@ -120,7 +120,7 @@ func (sdb *SubscriptionDB) CreateSubscription(ctx context.Context, tx pgx.Tx, su
 
     for _, featureID := range featureIDs {
         _, err = tx.Exec(ctx, `
-            INSERT INTO subscription_subscription_features (subscription_id, feature_id)
+            INSERT INTO subscriptions_subscription_features (subscription_id, feature_id)
             VALUES ($1, $2)
             ON CONFLICT DO NOTHING
         `, subscription.SubscriptionID, featureID)
@@ -128,7 +128,7 @@ func (sdb *SubscriptionDB) CreateSubscription(ctx context.Context, tx pgx.Tx, su
             return fmt.Errorf("failed to insert feature %s: %v", featureID, err)
         }
         _, err = tx.Exec(ctx, `
-            INSERT INTO subscription_history (history_id, subscription_id, event_type, new_feature_id, created_at)
+            INSERT INTO subscriptions_history (history_id, subscription_id, event_type, new_feature_id, created_at)
             VALUES ($1, $2, 'feature_added', $3, NOW())
         `, uuid.New(), subscription.SubscriptionID, featureID)
         if err != nil {
@@ -137,7 +137,7 @@ func (sdb *SubscriptionDB) CreateSubscription(ctx context.Context, tx pgx.Tx, su
     }
 
     _, err = tx.Exec(ctx, `
-        INSERT INTO subscription_history (history_id, subscription_id, event_type, created_at)
+        INSERT INTO subscriptions_history (history_id, subscription_id, event_type, created_at)
         VALUES ($1, $2, 'created', NOW())
     `, uuid.New(), subscription.SubscriptionID)
     if err != nil {
@@ -150,7 +150,7 @@ func (sdb *SubscriptionDB) CreateSubscription(ctx context.Context, tx pgx.Tx, su
 // CancelSubscription cancels a subscription
 func (sdb *SubscriptionDB) CancelSubscription(ctx context.Context, tx pgx.Tx, subscriptionID uuid.UUID) (models.SubscriptionStatus, error) {
     var status models.SubscriptionStatus
-    err := sdb.Pool.QueryRow(ctx, "SELECT status FROM subscription_subscription WHERE subscription_id = $1", subscriptionID).Scan(&status)
+    err := sdb.Pool.QueryRow(ctx, "SELECT status FROM subscriptions_subscription WHERE subscription_id = $1", subscriptionID).Scan(&status)
     if err == pgx.ErrNoRows {
         return "", fmt.Errorf("subscription %s not found", subscriptionID)
     }
@@ -171,7 +171,7 @@ func (sdb *SubscriptionDB) CancelSubscription(ctx context.Context, tx pgx.Tx, su
     }
 
     _, err = tx.Exec(ctx, `
-        INSERT INTO subscription_history (history_id, subscription_id, event_type, old_status, new_status, created_at)
+        INSERT INTO subscriptions_history (history_id, subscription_id, event_type, old_status, new_status, created_at)
         VALUES ($1, $2, 'canceled', $3, 'canceled', NOW())
     `, uuid.New(), subscriptionID, status)
     if err != nil {
@@ -185,7 +185,7 @@ func (sdb *SubscriptionDB) CancelSubscription(ctx context.Context, tx pgx.Tx, su
 func (sdb *SubscriptionDB) RenewSubscription(ctx context.Context, tx pgx.Tx, subscriptionID uuid.UUID) (models.SubscriptionStatus, bool, error) {
     var status models.SubscriptionStatus
     var autoRenew bool
-    err := sdb.Pool.QueryRow(ctx, "SELECT status, auto_renew FROM subscription_subscription WHERE subscription_id = $1", subscriptionID).Scan(&status, &autoRenew)
+    err := sdb.Pool.QueryRow(ctx, "SELECT status, auto_renew FROM subscriptions_subscription WHERE subscription_id = $1", subscriptionID).Scan(&status, &autoRenew)
     if err == pgx.ErrNoRows {
         return "", false, fmt.Errorf("subscription %s not found", subscriptionID)
     }
@@ -209,7 +209,7 @@ func (sdb *SubscriptionDB) RenewSubscription(ctx context.Context, tx pgx.Tx, sub
     }
 
     _, err = tx.Exec(ctx, `
-        INSERT INTO subscription_history (history_id, subscription_id, event_type, old_status, new_status, created_at)
+        INSERT INTO subscriptions_history (history_id, subscription_id, event_type, old_status, new_status, created_at)
         VALUES ($1, $2, 'renewed', $3, 'active', NOW())
     `, uuid.New(), subscriptionID, status)
     if err != nil {
@@ -223,7 +223,7 @@ func (sdb *SubscriptionDB) RenewSubscription(ctx context.Context, tx pgx.Tx, sub
 func (sdb *SubscriptionDB) ChangeSubscriptionPlan(ctx context.Context, tx pgx.Tx, subscriptionID, newPlanID uuid.UUID, newPlanName string) (uuid.UUID, models.SubscriptionStatus, error) {
     var oldPlanID uuid.UUID
     var status models.SubscriptionStatus
-    err := sdb.Pool.QueryRow(ctx, "SELECT plan_id, status FROM subscription_subscription WHERE subscription_id = $1", subscriptionID).Scan(&oldPlanID, &status)
+    err := sdb.Pool.QueryRow(ctx, "SELECT plan_id, status FROM subscriptions_subscription WHERE subscription_id = $1", subscriptionID).Scan(&oldPlanID, &status)
     if err == pgx.ErrNoRows {
         return uuid.UUID{}, "", fmt.Errorf("subscription %s not found", subscriptionID)
     }
@@ -247,7 +247,7 @@ func (sdb *SubscriptionDB) ChangeSubscriptionPlan(ctx context.Context, tx pgx.Tx
     }
 
     _, err = tx.Exec(ctx, `
-        INSERT INTO subscription_history (history_id, subscription_id, event_type, old_plan_id, new_plan_id, created_at)
+        INSERT INTO subscriptions_history (history_id, subscription_id, event_type, old_plan_id, new_plan_id, created_at)
         VALUES ($1, $2, 'plan_changed', $3, $4, NOW())
     `, uuid.New(), subscriptionID, oldPlanID, newPlanID)
     if err != nil {
@@ -260,7 +260,7 @@ func (sdb *SubscriptionDB) ChangeSubscriptionPlan(ctx context.Context, tx pgx.Tx
 // LogError logs an error to subscription_history
 func (sdb *SubscriptionDB) LogError(ctx context.Context, subscriptionID uuid.UUID, errorMsg, streamID string) error {
     _, err := sdb.Pool.Exec(ctx, `
-        INSERT INTO subscription_history (history_id, subscription_id, event_type, notes, created_at)
+        INSERT INTO subscriptions_history (history_id, subscription_id, event_type, notes, created_at)
         VALUES ($1, $2, 'error', $3, NOW())
     `, uuid.New(), subscriptionID, fmt.Sprintf("Failed: %s (Stream ID: %s)", errorMsg, streamID))
     if err != nil {
