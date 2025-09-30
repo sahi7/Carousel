@@ -5,6 +5,8 @@ import (
     "encoding/json"
     "fmt"
     "time"
+	"log"
+	"strings"
 
     "carousel/internal/cache"
     "carousel/internal/models"
@@ -57,7 +59,6 @@ func (sdb *SubscriptionDB) CacheAllPlans(ctx context.Context) error {
 
 // GetPlan retrieves a plan by ID, checking cache first
 func (sdb *SubscriptionDB) GetPlan(ctx context.Context, planID uuid.UUID) (*models.Plan, error) {
-    // Try cache first
     cached, err := sdb.Cache.Get(ctx, "plans:active")
     if err == nil {
         var plans []models.Plan
@@ -69,10 +70,8 @@ func (sdb *SubscriptionDB) GetPlan(ctx context.Context, planID uuid.UUID) (*mode
                 return &plan, nil
             }
         }
-        return nil, fmt.Errorf("plan %s not found in cache", planID)
     }
 
-    // Fallback to database
     var plan models.Plan
     err = sdb.Pool.QueryRow(ctx, `
         SELECT plan_id, name, billing_type, monthly_price, included_credits, grace_credits, grace_days, is_active, created_at
@@ -87,33 +86,152 @@ func (sdb *SubscriptionDB) GetPlan(ctx context.Context, planID uuid.UUID) (*mode
         return nil, fmt.Errorf("failed to get plan: %v", err)
     }
 
-    // Refresh cache after DB fetch
     if err := sdb.CacheAllPlans(ctx); err != nil {
-        // Log error but don't fail the request
         fmt.Printf("Failed to refresh plans cache: %v\n", err)
     }
 
     return &plan, nil
 }
 
+// CacheAllFeatures caches all active features in Redis
+func (sdb *SubscriptionDB) CacheAllFeatures(ctx context.Context) error {
+    rows, err := sdb.Pool.Query(ctx, `
+        SELECT feature_id, name, description, price, is_active, created_at
+        FROM subscriptions_feature WHERE is_active = TRUE
+    `)
+    if err != nil {
+        return fmt.Errorf("failed to query features: %v", err)
+    }
+    defer rows.Close()
+
+    var features []models.Feature
+    for rows.Next() {
+        var feature models.Feature
+        err := rows.Scan(
+            &feature.FeatureID, &feature.Name, &feature.Description, &feature.Price,
+            &feature.IsActive, &feature.CreatedAt)
+        if err != nil {
+            return fmt.Errorf("failed to scan feature: %v", err)
+        }
+        features = append(features, feature)
+    }
+
+    data, err := json.Marshal(features)
+    if err != nil {
+        return fmt.Errorf("failed to marshal features: %v", err)
+    }
+    return sdb.Cache.Set(ctx, "features:active", data, 24*time.Hour)
+}
+
+// GetFeature retrieves a feature by ID, checking cache first
+func (sdb *SubscriptionDB) GetFeature(ctx context.Context, featureID uuid.UUID) (*models.Feature, error) {
+    cached, err := sdb.Cache.Get(ctx, "features:active")
+    if err == nil {
+        var features []models.Feature
+        if err := json.Unmarshal([]byte(cached), &features); err != nil {
+            return nil, fmt.Errorf("failed to unmarshal features: %v", err)
+        }
+        for _, feature := range features {
+            if feature.FeatureID == featureID {
+                return &feature, nil
+            }
+        }
+    }
+
+    var feature models.Feature
+    err = sdb.Pool.QueryRow(ctx, `
+        SELECT feature_id, name, description, price, is_active, created_at
+        FROM subscriptions_feature WHERE feature_id = $1 AND is_active = TRUE
+    `, featureID).Scan(
+        &feature.FeatureID, &feature.Name, &feature.Description, &feature.Price,
+        &feature.IsActive, &feature.CreatedAt)
+    if err == pgx.ErrNoRows {
+        return nil, fmt.Errorf("feature %s not found or inactive", featureID)
+    }
+    if err != nil {
+        return nil, fmt.Errorf("failed to get feature: %v", err)
+    }
+
+    if err := sdb.CacheAllFeatures(ctx); err != nil {
+        fmt.Printf("Failed to refresh features cache: %v\n", err)
+    }
+
+    return &feature, nil
+}
+
 // CheckSubscriptionExists checks if a subscription exists
 func (sdb *SubscriptionDB) CheckSubscriptionExists(ctx context.Context, subscriptionID uuid.UUID) (bool, error) {
+    cached, err := sdb.Cache.Get(ctx, "subscription:"+subscriptionID.String())
+    if err == nil && cached == "exists" {
+        return true, nil
+    }
     var exists bool
-    err := sdb.Pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM subscriptions_subscription WHERE subscription_id = $1)", subscriptionID).Scan(&exists)
+    err = sdb.Pool.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM subscriptions_subscription WHERE subscription_id = $1)", subscriptionID).Scan(&exists)
     if err != nil {
-        return false, fmt.Errorf("failed to check subscription existence: %v", err)
+        return false, fmt.Errorf("failed to check subscription: %v", err)
+    }
+    if exists {
+        sdb.Cache.Set(ctx, "subscription:"+subscriptionID.String(), []byte("exists"), 24*time.Hour)
     }
     return exists, nil
 }
 
 // CreateSubscription creates a new subscription
 func (sdb *SubscriptionDB) CreateSubscription(ctx context.Context, tx pgx.Tx, subscription *models.Subscription, featureIDs []uuid.UUID) error {
-    _, err := tx.Exec(ctx, `
-        INSERT INTO subscriptions_subscription (subscription_id, entity_type, entity_id, plan_id, status, start_date, current_period_start, plan_name, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    `, subscription.SubscriptionID, subscription.EntityType, subscription.EntityID, subscription.PlanID,
-        subscription.Status, subscription.StartDate, subscription.CurrentPeriodStart,
-        subscription.PlanName, subscription.CreatedAt, subscription.UpdatedAt)
+    // Validate features
+    for _, featureID := range featureIDs {
+        feature, err := sdb.GetFeature(ctx, featureID)
+        if err != nil {
+            return fmt.Errorf("invalid feature %s: %v", featureID, err)
+        }
+        if !feature.IsActive {
+            return fmt.Errorf("feature %s is not active", featureID)
+        }
+    }
+
+    // Get plan for billing type and included credits
+    plan, err := sdb.GetPlan(ctx, subscription.PlanID)
+    if err != nil {
+        return fmt.Errorf("failed to get plan: %v", err)
+    }
+
+    // Set balance based on included_credits for pay_per_order
+    if plan.BillingType == models.BillingTypePayPerOrder {
+        subscription.Balance = plan.IncludedCredits
+    }
+
+    // Set current_period_end based on billing type
+    if plan.BillingType == models.BillingTypeMonthlyFixed {
+		currentPeriodEnd := subscription.CurrentPeriodStart.AddDate(0, 1, 0)
+		subscription.CurrentPeriodEnd = &currentPeriodEnd
+	} else if plan.BillingType == models.BillingTypeYearlyFixed {
+		currentPeriodEnd := subscription.CurrentPeriodStart.AddDate(1, 0, 0)
+		subscription.CurrentPeriodEnd = &currentPeriodEnd
+	} else {
+		subscription.CurrentPeriodEnd = nil
+	}
+
+    // Set auto_renew to false
+    subscription.AutoRenew = false
+
+	// Set trial_end_date based on plan's trial_days
+	if plan.TrialDays > 0 {
+		trialEndDate := subscription.StartDate.AddDate(0, 0, plan.TrialDays)
+		subscription.TrialEndDate = &trialEndDate
+	} else {
+		subscription.TrialEndDate = nil
+	}
+
+    _, err = tx.Exec(ctx, `
+		INSERT INTO subscriptions_subscription (
+			subscription_id, entity_type, entity_id, plan_id, status, start_date, trial_end_date,
+			current_period_start, current_period_end, auto_renew, cancel_at_period_end, balance, plan_name, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+	`, subscription.SubscriptionID, subscription.EntityType, subscription.EntityID, subscription.PlanID,
+		subscription.Status, subscription.StartDate, subscription.TrialEndDate,
+		subscription.CurrentPeriodStart, subscription.CurrentPeriodEnd, subscription.AutoRenew,
+		subscription.CancelAtPeriodEnd, subscription.Balance, subscription.PlanName,
+		subscription.CreatedAt, subscription.UpdatedAt)
     if err != nil {
         return fmt.Errorf("failed to insert subscription: %v", err)
     }
@@ -259,11 +377,22 @@ func (sdb *SubscriptionDB) ChangeSubscriptionPlan(ctx context.Context, tx pgx.Tx
 
 // LogError logs an error to subscription_history
 func (sdb *SubscriptionDB) LogError(ctx context.Context, subscriptionID uuid.UUID, errorMsg, streamID string) error {
+    // log.Printf("%s: Logging error: %s, StreamID: %s",subscriptionID, errorMsg, streamID)
+    notes := fmt.Sprintf("Failed: %s (Stream ID: %s)", errorMsg, streamID)
+    // Try inserting with subscription_id first
     _, err := sdb.Pool.Exec(ctx, `
         INSERT INTO subscriptions_history (history_id, subscription_id, event_type, notes, created_at)
-        VALUES ($1, $2, 'error', $3, NOW())
-    `, uuid.New(), subscriptionID, fmt.Sprintf("Failed: %s (Stream ID: %s)", errorMsg, streamID))
+        VALUES ($1, $2, $3, $4, NOW())
+    `, uuid.New(), subscriptionID, models.EventError, notes)
+    if err != nil && strings.Contains(err.Error(), "SQLSTATE 23503") {
+        // Retry without subscription_id if foreign key constraint is violated
+        _, err = sdb.Pool.Exec(ctx, `
+            INSERT INTO subscriptions_history (history_id, event_type, notes, created_at)
+            VALUES ($1, $2, $3, NOW())
+        `, uuid.New(), models.EventError, notes)
+    }
     if err != nil {
+        log.Printf("Failed to log error to database: %v", err)
         return fmt.Errorf("failed to log error: %v", err)
     }
     return nil

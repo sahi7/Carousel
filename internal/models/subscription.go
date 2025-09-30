@@ -11,6 +11,7 @@ type BillingType string
 
 const (
     BillingTypeMonthlyFixed BillingType = "monthly_fixed"
+    BillingTypeYearlyFixed  BillingType = "yearly_fixed"
     BillingTypePayPerOrder  BillingType = "pay_per_order"
 )
 
@@ -57,6 +58,7 @@ type Plan struct {
     IncludedCredits int
     GraceCredits   int
     GraceDays      int
+    TrialDays      int
     IsActive       bool
     CreatedAt      time.Time
 }
@@ -80,6 +82,7 @@ type Subscription struct {
     Features          []uuid.UUID
     Status            SubscriptionStatus
     StartDate         time.Time
+    TrialEndDate      *time.Time
     CurrentPeriodStart time.Time
     CurrentPeriodEnd   *time.Time
     AutoRenew         bool
@@ -108,7 +111,6 @@ type History struct {
 // SubscriptionRequest represents a request from Redis Stream
 type SubscriptionRequest struct {
     Type           string    `json:"type"`
-    RequestID      string    `json:"request_id"`
     SubscriptionID string    `json:"subscription_id"`
     EntityType     string    `json:"entity_type"`
     EntityID       int       `json:"entity_id"`

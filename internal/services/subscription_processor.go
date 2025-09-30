@@ -6,11 +6,13 @@ import (
     "fmt"
     "log"
     "time"
+	"sync"
 
     "carousel/internal/db"
     "carousel/internal/models"
 
     "github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -42,20 +44,46 @@ func NewSubscriptionProcessor(postgres *db.Postgres) *SubscriptionProcessor {
 
 // Start begins processing the Redis Stream
 func (sp *SubscriptionProcessor) Start(ctx context.Context) error {
-    // Cache all plans on startup
+    if err := sp.db.Cache.CreateConsumerGroup(ctx, StreamName, GroupName); err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
+        return fmt.Errorf("failed to create consumer group: %v", err)
+    }
+    log.Printf("Consumer group %s created for stream %s", GroupName, StreamName)
+
+    // Cache plans and features on startup
     if err := sp.db.CacheAllPlans(ctx); err != nil {
         log.Printf("Failed to cache plans on startup: %v", err)
     }
-
-    err := sp.db.Cache.CreateConsumerGroup(ctx, StreamName, GroupName)
-    if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
-        return fmt.Errorf("failed to create consumer group: %v", err)
+    if err := sp.db.CacheAllFeatures(ctx); err != nil {
+        log.Printf("Failed to cache features on startup: %v", err)
     }
 
+    // err := sp.db.Cache.CreateConsumerGroup(ctx, StreamName, GroupName)
+    // if err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
+    //     return fmt.Errorf("failed to create consumer group: %v", err)
+    // }
+	// log.Printf("Consumer group %s created for stream %s", GroupName, StreamName)
+
     consumerID := uuid.New().String()
+    log.Printf("Starting consumer %s", consumerID)
+    go func() {
+        ticker := time.NewTicker(1 * time.Hour)
+        defer ticker.Stop()
+        for {
+            select {
+            case <-ctx.Done():
+                return
+            case <-ticker.C:
+                if _, err := sp.db.Cache.XTrimMaxLen(ctx, StreamName, MaxStreamLength); err != nil {
+                    log.Printf("Failed to trim stream: %v", err)
+                }
+            }
+        }
+    }()
+
     for {
         select {
         case <-ctx.Done():
+            log.Printf("Context canceled, stopping processor")
             return ctx.Err()
         default:
             entries, err := sp.db.Cache.XReadGroup(ctx, GroupName, consumerID, StreamName)
@@ -64,30 +92,64 @@ func (sp *SubscriptionProcessor) Start(ctx context.Context) error {
                 time.Sleep(1 * time.Second)
                 continue
             }
-
+            log.Printf("Read %d messages from stream", len(entries[0].Messages))
+            var wg sync.WaitGroup
             for _, entry := range entries[0].Messages {
-                sp.processMessage(ctx, entry.ID, entry.Values)
+                wg.Add(1)
+                go func(entry redis.XMessage) {
+                    defer wg.Done()
+                    sp.processMessage(ctx, entry.ID, entry.Values)
+                }(entry)
             }
+            wg.Wait()
         }
     }
 }
 
 // processMessage processes a single stream message
 func (sp *SubscriptionProcessor) processMessage(ctx context.Context, streamID string, values map[string]interface{}) {
-	fmt.Printf("streamID-values: ", streamID, values, "\n")
+	// log.Printf("Received stream message ID %s: %v", streamID, values)
 	var req models.SubscriptionRequest
     data, err := json.Marshal(values)
     if err != nil {
         sp.db.LogError(ctx, uuid.UUID{}, fmt.Sprintf("Invalid JSON: %v", err), streamID)
         return
     }
-    if err := json.Unmarshal(data, &req); err != nil {
-        sp.db.LogError(ctx, uuid.UUID{}, fmt.Sprintf("Invalid JSON: %v", err), streamID)
+	log.Printf("Marshaled data: %s", string(data))
+
+	// Parse feature_ids as a JSON string
+    if featureIDsStr, ok := values["feature_ids"].(string); ok && featureIDsStr != "" {
+        var featureIDs []string
+        if err := json.Unmarshal([]byte(featureIDsStr), &featureIDs); err != nil {
+            sp.db.LogError(ctx, uuid.UUID{}, fmt.Sprintf("Invalid feature_ids JSON: %v", err), streamID)
+            return
+        }
+        req.FeatureIDs = featureIDs
+    } else {
+        req.FeatureIDs = []string{}
+    }
+
+    // Populate other fields
+    req.Type, _ = values["type"].(string)
+    req.SubscriptionID, _ = values["subscription_id"].(string)
+    req.EntityType, _ = values["entity_type"].(string)
+	if entityID, ok := values["entity_id"].(string); ok {
+        var id int
+        if _, err := fmt.Sscanf(entityID, "%d", &id); err != nil {
+            sp.db.LogError(ctx, uuid.UUID{}, fmt.Sprintf("Invalid entity_id: %v", err), streamID)
+            return
+        }
+        req.EntityID = id
+    } else {
+        sp.db.LogError(ctx, uuid.UUID{}, "Missing or invalid entity_id", streamID)
         return
     }
+    req.PlanID, _ = values["plan_id"].(string)
+	// log.Printf("Unmarshaled request: %+v", req)
 
     handler, exists := sp.handlers[req.Type]
     if !exists {
+		log.Printf("Unknown message type: %s", req.Type)
         sp.db.LogError(ctx, uuid.UUID{}, fmt.Sprintf("Unknown message type: %s", req.Type), streamID)
         sp.db.Cache.XAdd(ctx, DLQStreamName, values)
         return
@@ -97,11 +159,13 @@ func (sp *SubscriptionProcessor) processMessage(ctx context.Context, streamID st
     for attempt := 1; attempt <= MaxRetries; attempt++ {
         success, err = handler(ctx, req)
         if success {
+			log.Printf("Successfully processed message %s", streamID)
             sp.db.Cache.XAck(ctx, StreamName, GroupName, streamID)
             sp.db.Cache.XTrimMaxLen(ctx, StreamName, MaxStreamLength)
             break
         }
         if attempt == MaxRetries {
+			log.Printf("Failed after %d retries: %v", MaxRetries, err)
             sp.db.Cache.XAdd(ctx, DLQStreamName, values)
             subscriptionID, _ := uuid.Parse(req.SubscriptionID)
             sp.db.LogError(ctx, subscriptionID, fmt.Sprintf("Failed after %d retries: %v", MaxRetries, err), streamID)
@@ -113,8 +177,8 @@ func (sp *SubscriptionProcessor) processMessage(ctx context.Context, streamID st
 
 // handleCreate processes subscription creation
 func (sp *SubscriptionProcessor) handleCreate(ctx context.Context, req models.SubscriptionRequest) (bool, error) {
-    fmt.Printf("subscription req: ", req, "\n")
-	subscriptionID, err := uuid.Parse(req.SubscriptionID)
+    // log.Printf("Handling subscription create: %+v", req)
+    subscriptionID, err := uuid.Parse(req.SubscriptionID)
     if err != nil {
         return false, fmt.Errorf("invalid subscription_id: %v", err)
     }
@@ -122,13 +186,21 @@ func (sp *SubscriptionProcessor) handleCreate(ctx context.Context, req models.Su
     if err != nil {
         return false, fmt.Errorf("invalid plan_id: %v", err)
     }
-    featureIDs := make([]uuid.UUID, len(req.FeatureIDs))
-    for i, fid := range req.FeatureIDs {
+    featureIDs := make([]uuid.UUID, 0, len(req.FeatureIDs))
+    for _, fid := range req.FeatureIDs {
         featureID, err := uuid.Parse(fid)
         if err != nil {
             return false, fmt.Errorf("invalid feature_id %s: %v", fid, err)
         }
-        featureIDs[i] = featureID
+        // Validate feature against cache
+        feature, err := sp.db.GetFeature(ctx, featureID)
+        if err != nil {
+            return false, fmt.Errorf("invalid feature %s: %v", featureID, err)
+        }
+        if !feature.IsActive {
+            return false, fmt.Errorf("feature %s is not active", featureID)
+        }
+        featureIDs = append(featureIDs, featureID)
     }
 
     // Check idempotency
@@ -160,6 +232,7 @@ func (sp *SubscriptionProcessor) handleCreate(ctx context.Context, req models.Su
         EntityType:        models.EntityType(req.EntityType),
         EntityID:          req.EntityID,
         PlanID:            planID,
+        Features:          featureIDs,
         Status:            models.StatusTrial,
         StartDate:         time.Now(),
         CurrentPeriodStart: time.Now(),
