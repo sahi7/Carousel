@@ -30,7 +30,7 @@ func NewSubscriptionDB(pool *pgxpool.Pool, cache *cache.Redis) *SubscriptionDB {
 // CacheAllPlans caches all active plans in Redis
 func (sdb *SubscriptionDB) CacheAllPlans(ctx context.Context) error {
     rows, err := sdb.Pool.Query(ctx, `
-        SELECT plan_id, name, billing_type, monthly_price, included_credits, grace_credits, grace_days, is_active, created_at
+        SELECT plan_id, name, billing_type, monthly_price, included_credits, grace_credits, grace_days, trial_days, is_active, created_at
         FROM subscriptions_plan WHERE is_active = TRUE
     `)
     if err != nil {
@@ -43,7 +43,7 @@ func (sdb *SubscriptionDB) CacheAllPlans(ctx context.Context) error {
         var plan models.Plan
         err := rows.Scan(
             &plan.PlanID, &plan.Name, &plan.BillingType, &plan.MonthlyPrice, &plan.IncludedCredits,
-            &plan.GraceCredits, &plan.GraceDays, &plan.IsActive, &plan.CreatedAt)
+            &plan.GraceCredits, &plan.GraceDays, &plan.TrialDays, &plan.IsActive, &plan.CreatedAt)
         if err != nil {
             return fmt.Errorf("failed to scan plan: %v", err)
         }
@@ -74,11 +74,11 @@ func (sdb *SubscriptionDB) GetPlan(ctx context.Context, planID uuid.UUID) (*mode
 
     var plan models.Plan
     err = sdb.Pool.QueryRow(ctx, `
-        SELECT plan_id, name, billing_type, monthly_price, included_credits, grace_credits, grace_days, is_active, created_at
+        SELECT plan_id, name, billing_type, monthly_price, included_credits, grace_credits, grace_days, trial_days, is_active, created_at
         FROM subscriptions_plan WHERE plan_id = $1 AND is_active = TRUE
     `, planID).Scan(
         &plan.PlanID, &plan.Name, &plan.BillingType, &plan.MonthlyPrice, &plan.IncludedCredits,
-        &plan.GraceCredits, &plan.GraceDays, &plan.IsActive, &plan.CreatedAt)
+        &plan.GraceCredits, &plan.GraceDays, &plan.TrialDays, &plan.IsActive, &plan.CreatedAt)
     if err == pgx.ErrNoRows {
         return nil, fmt.Errorf("plan %s not found or inactive", planID)
     }
