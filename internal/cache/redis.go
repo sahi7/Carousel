@@ -62,3 +62,17 @@ func (r *Redis) XTrimMaxLen(ctx context.Context, stream string, maxLen int64) (i
 func (r *Redis) CreateConsumerGroup(ctx context.Context, stream, group string) error {
     return r.client.XGroupCreateMkStream(ctx, stream, group, "0").Err()
 }
+
+// SendAck sends an acknowledgment message to the ACK stream
+func (r *Redis) SendAck(ctx context.Context, stream, eventType, subscriptionID string) (string, error) {
+    values := map[string]interface{}{
+        "type":           eventType + ".ack",
+        "subscription_id": subscriptionID,
+        "status":         "success",
+        "created_at":     time.Now().UTC().Format(time.RFC3339),
+    }
+    return r.client.XAdd(ctx, &redis.XAddArgs{
+        Stream: stream,
+        Values: values,
+    }).Result()
+}

@@ -18,6 +18,7 @@ import (
 const (
     StreamName      = "rms.stream"
     GroupName       = "subscription_group"
+	AckStreamName   = "rms.ack.stream"
     DLQStreamName   = "rms.dlq.stream"
     MaxRetries      = 3
     MaxStreamLength = 10000
@@ -113,6 +114,12 @@ func (sp *SubscriptionProcessor) processMessage(ctx context.Context, streamID st
     data, err := json.Marshal(values)
     if err != nil {
         sp.db.LogError(ctx, uuid.UUID{}, fmt.Sprintf("Invalid JSON: %v", err), streamID)
+		sp.db.Cache.XAdd(ctx, DLQStreamName, map[string]interface{}{
+            "type":            values["type"],
+            "subscription_id": values["subscription_id"],
+            "error":           fmt.Sprintf("Invalid JSON: %v", err),
+            "original_message": string(data),
+        })
         return
     }
 	log.Printf("Marshaled data: %s", string(data))
@@ -122,6 +129,12 @@ func (sp *SubscriptionProcessor) processMessage(ctx context.Context, streamID st
         var featureIDs []string
         if err := json.Unmarshal([]byte(featureIDsStr), &featureIDs); err != nil {
             sp.db.LogError(ctx, uuid.UUID{}, fmt.Sprintf("Invalid feature_ids JSON: %v", err), streamID)
+			sp.db.Cache.XAdd(ctx, DLQStreamName, map[string]interface{}{
+                "type":            values["type"],
+                "subscription_id": values["subscription_id"],
+                "error":           fmt.Sprintf("Invalid feature_ids JSON: %v", err),
+                "original_message": string(data),
+            })
             return
         }
         req.FeatureIDs = featureIDs
@@ -151,7 +164,12 @@ func (sp *SubscriptionProcessor) processMessage(ctx context.Context, streamID st
     if !exists {
 		log.Printf("Unknown message type: %s", req.Type)
         sp.db.LogError(ctx, uuid.UUID{}, fmt.Sprintf("Unknown message type: %s", req.Type), streamID)
-        sp.db.Cache.XAdd(ctx, DLQStreamName, values)
+        sp.db.Cache.XAdd(ctx, DLQStreamName, map[string]interface{}{
+            "type":            req.Type,
+            "subscription_id": req.SubscriptionID,
+            "error":           fmt.Sprintf("Unknown message type: %s", req.Type),
+            "original_message": string(data),
+        })
         return
     }
 
@@ -161,12 +179,18 @@ func (sp *SubscriptionProcessor) processMessage(ctx context.Context, streamID st
         if success {
 			log.Printf("Successfully processed message %s", streamID)
             sp.db.Cache.XAck(ctx, StreamName, GroupName, streamID)
+			sp.db.Cache.SendAck(ctx, AckStreamName, req.Type, req.SubscriptionID)
             sp.db.Cache.XTrimMaxLen(ctx, StreamName, MaxStreamLength)
             break
         }
         if attempt == MaxRetries {
 			log.Printf("Failed after %d retries: %v", MaxRetries, err)
-            sp.db.Cache.XAdd(ctx, DLQStreamName, values)
+            sp.db.Cache.XAdd(ctx, DLQStreamName, map[string]interface{}{
+                "type":            req.Type,
+                "subscription_id": req.SubscriptionID,
+                "error":           fmt.Sprintf("Failed after %d retries: %v", MaxRetries, err),
+                "original_message": string(data),
+            })
             subscriptionID, _ := uuid.Parse(req.SubscriptionID)
             sp.db.LogError(ctx, subscriptionID, fmt.Sprintf("Failed after %d retries: %v", MaxRetries, err), streamID)
             break
